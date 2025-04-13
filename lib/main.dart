@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math';
@@ -16,7 +17,7 @@ void main() {
 }
 
 class PixelFixApp extends StatelessWidget {
-  const PixelFixApp({Key? key}) : super(key: key);
+  const PixelFixApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +31,7 @@ class PixelFixApp extends StatelessWidget {
 }
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +103,7 @@ class HomeScreen extends StatelessWidget {
 }
 
 class PixelFixScreen extends StatefulWidget {
-  const PixelFixScreen({Key? key}) : super(key: key);
+  const PixelFixScreen({super.key});
 
   @override
   State<PixelFixScreen> createState() => _PixelFixScreenState();
@@ -209,7 +210,9 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
       });
     } catch (e) {
       // If loading fails, use default values
-      print('Failed to load preferences: $e');
+      if (kDebugMode) {
+        print('Failed to load preferences: $e');
+      }
     }
   }
 
@@ -220,7 +223,9 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
       await prefs.setInt('patternIndex', _patternIndex);
       await prefs.setDouble('speedInSeconds', _speedInSeconds);
     } catch (e) {
-      print('Failed to save preferences: $e');
+      if (kDebugMode) {
+        print('Failed to save preferences: $e');
+      }
     }
   }
 
@@ -272,12 +277,13 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
               break;
 
             case 1: // RGB Flashing
-              if (_colorIndex % 3 == 0)
+              if (_colorIndex % 3 == 0) {
                 _currentColor = Colors.red;
-              else if (_colorIndex % 3 == 1)
+              } else if (_colorIndex % 3 == 1) {
                 _currentColor = Colors.green;
-              else
+              } else {
                 _currentColor = Colors.blue;
+              }
               _colorIndex++;
               break;
 
@@ -547,7 +553,7 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
                 left: 0,
                 right: 0,
                 child: Container(
-                  color: Colors.black.withOpacity(0.7),
+                  color: Colors.black.withValues(alpha: .7),
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -681,7 +687,7 @@ class PixelGridPainter extends CustomPainter {
 }
 
 class PixelGridScreen extends StatefulWidget {
-  const PixelGridScreen({Key? key}) : super(key: key);
+  const PixelGridScreen({super.key});
 
   @override
   State<PixelGridScreen> createState() => _PixelGridScreenState();
@@ -922,7 +928,7 @@ class _PixelGridScreenState extends State<PixelGridScreen> {
 }
 
 class StressTestScreen extends StatefulWidget {
-  const StressTestScreen({Key? key}) : super(key: key);
+  const StressTestScreen({super.key});
 
   @override
   State<StressTestScreen> createState() => _StressTestScreenState();
@@ -958,11 +964,9 @@ class _StressTestScreenState extends State<StressTestScreen> {
   List<double> _fpsReadings = [];
 
   // Uncapped FPS measurement
-  bool _measureUncappedFps = true;
   double _uncappedFps = 0;
   double _maxUncappedFps = 0;
   int _uncappedFrameCount = 0;
-  int _lastUncappedTime = 0;
   Stopwatch _fpsStopwatch = Stopwatch();
 
   // Pattern definitions
@@ -1135,7 +1139,6 @@ class _StressTestScreenState extends State<StressTestScreen> {
     _uncappedFps = 0;
     _maxUncappedFps = 0;
     _uncappedFrameCount = 0;
-    _lastUncappedTime = DateTime.now().millisecondsSinceEpoch;
     _fpsStopwatch.reset();
     _fpsStopwatch.start();
 
@@ -1388,7 +1391,7 @@ class _StressTestScreenState extends State<StressTestScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Stress Test Results (${percentComplete}% Complete)'),
+          title: Text('Stress Test Results ($percentComplete% Complete)'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1577,8 +1580,9 @@ class _StressTestScreenState extends State<StressTestScreen> {
                           onChanged:
                               !_isRunning
                                   ? (value) {
-                                    if (value != null)
+                                    if (value != null) {
                                       _changeTestPattern(value);
+                                    }
                                   }
                                   : null,
                         ),
@@ -1722,7 +1726,7 @@ class _StressTestScreenState extends State<StressTestScreen> {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
+                  color: Colors.black.withValues(alpha: .7),
                   borderRadius: BorderRadius.circular(5),
                 ),
                 child: Column(
