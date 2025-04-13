@@ -23,7 +23,14 @@ class PixelFixApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Pixel Fix App',
-      theme: ThemeData(primarySwatch: Colors.blue, brightness: Brightness.dark),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        brightness: Brightness.dark,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+        ),
+      ),
       home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
     );
@@ -37,6 +44,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Pixel Fix Utility')),
+      backgroundColor: const Color.fromARGB(36, 255, 255, 255),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -113,9 +121,17 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
   bool _isFullScreen = false;
   bool _isRunning = false;
   Timer? _timer;
+  Timer? _patternSwitchTimer; // New timer for alternating patterns
   Color _currentColor = Colors.red;
   int _patternIndex = 0;
   double _speedInSeconds = 2.0;
+
+  // Alternating patterns settings
+  bool _useAlternatePatterns = false;
+  List<int> _alternatePatternIndices = [0, 1]; // Default patterns to alternate
+  int _alternatePatternInterval = 10; // Seconds between pattern switches
+  int _currentAlternatingIndex =
+      0; // Track which pattern in the sequence we're on
 
   // Speed options in seconds
   final List<Map<String, dynamic>> _speedOptions = [
@@ -207,6 +223,21 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
       setState(() {
         _patternIndex = prefs.getInt('patternIndex') ?? 0;
         _speedInSeconds = prefs.getDouble('speedInSeconds') ?? 2.0;
+
+        // Load alternating patterns settings
+        _useAlternatePatterns = prefs.getBool('useAlternatePatterns') ?? false;
+
+        // Load alternating pattern indices
+        final List<String>? indexStrings = prefs.getStringList(
+          'alternatePatternIndices',
+        );
+        if (indexStrings != null && indexStrings.isNotEmpty) {
+          _alternatePatternIndices =
+              indexStrings.map((s) => int.parse(s)).toList();
+        }
+
+        _alternatePatternInterval =
+            prefs.getInt('alternatePatternInterval') ?? 10;
       });
     } catch (e) {
       // If loading fails, use default values
@@ -222,6 +253,16 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
 
       await prefs.setInt('patternIndex', _patternIndex);
       await prefs.setDouble('speedInSeconds', _speedInSeconds);
+
+      // Save alternating patterns settings
+      await prefs.setBool('useAlternatePatterns', _useAlternatePatterns);
+
+      // Convert the list of integers to a list of strings for SharedPreferences
+      final List<String> indexStrings =
+          _alternatePatternIndices.map((i) => i.toString()).toList();
+      await prefs.setStringList('alternatePatternIndices', indexStrings);
+
+      await prefs.setInt('alternatePatternInterval', _alternatePatternInterval);
     } catch (e) {
       if (kDebugMode) {
         print('Failed to save preferences: $e');
@@ -248,10 +289,48 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
       _isRunning = !_isRunning;
       if (_isRunning) {
         _startPixelFix();
+
+        // Start pattern alternation if enabled
+        if (_useAlternatePatterns) {
+          _startPatternAlternation();
+        }
       } else {
         _timer?.cancel();
+        _patternSwitchTimer?.cancel();
       }
     });
+  }
+
+  void _startPatternAlternation() {
+    // Cancel any existing pattern switch timer
+    _patternSwitchTimer?.cancel();
+
+    // Reset alternating pattern index
+    _currentAlternatingIndex = 0;
+
+    // Create a timer to alternate between patterns
+    _patternSwitchTimer = Timer.periodic(
+      Duration(seconds: _alternatePatternInterval),
+      (timer) {
+        if (!_isRunning) return;
+
+        setState(() {
+          // Move to the next pattern in the alternating sequence
+          _currentAlternatingIndex =
+              (_currentAlternatingIndex + 1) % _alternatePatternIndices.length;
+
+          // Set the new pattern
+          _patternIndex = _alternatePatternIndices[_currentAlternatingIndex];
+
+          // Reset flags for the new pattern
+          _isGridInitialized = false;
+
+          // Restart the pixel fix with the new pattern
+          _timer?.cancel();
+          _startPixelFix();
+        });
+      },
+    );
   }
 
   void _startPixelFix() {
@@ -519,11 +598,174 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
     });
   }
 
+  void _showAlternatingPatternsDialog() {
+    // Create a local copy of the alternating pattern indices for editing
+    List<int> selectedPatterns = List.from(_alternatePatternIndices);
+    // Text controller for the interval input
+    final intervalController = TextEditingController(
+      text: _alternatePatternInterval.toString(),
+    );
+    // Local toggle for the alternating pattern feature
+    bool enableAlternating = _useAlternatePatterns;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Configure Alternating Patterns'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Toggle for enabling/disabling alternating patterns
+                    SwitchListTile(
+                      title: const Text('Enable Alternating Patterns'),
+                      subtitle: const Text(
+                        'Automatically switch between selected patterns',
+                      ),
+                      value: enableAlternating,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          enableAlternating = value;
+                        });
+                      },
+                    ),
+
+                    const Divider(),
+
+                    // Pattern selection section
+                    const Text(
+                      'Select Patterns to Alternate:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Pattern selection chips
+                    Wrap(
+                      spacing: 8.0,
+                      runSpacing: 4.0,
+                      children: List.generate(_patternNames.length, (index) {
+                        return FilterChip(
+                          label: Text(
+                            _patternNames[index],
+                            style: TextStyle(
+                              fontSize: 12,
+                              color:
+                                  selectedPatterns.contains(index)
+                                      ? Colors.white
+                                      : null,
+                            ),
+                          ),
+                          selected: selectedPatterns.contains(index),
+                          selectedColor: Colors.blue,
+                          onSelected:
+                              enableAlternating
+                                  ? (selected) {
+                                    setDialogState(() {
+                                      if (selected) {
+                                        selectedPatterns.add(index);
+                                      } else if (selectedPatterns.length > 1) {
+                                        // Don't allow removing all patterns
+                                        selectedPatterns.remove(index);
+                                      }
+                                    });
+                                  }
+                                  : null,
+                        );
+                      }),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Interval configuration
+                    const Text(
+                      'Switch Interval:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Interval input
+                    TextField(
+                      controller: intervalController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Seconds',
+                        helperText: 'Time between pattern switches',
+                      ),
+                      enabled: enableAlternating,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    // Ensure at least one pattern is selected
+                    if (selectedPatterns.isEmpty) {
+                      selectedPatterns.add(0);
+                    }
+
+                    // Sort patterns to maintain a consistent order
+                    selectedPatterns.sort();
+
+                    // Parse and validate interval
+                    int interval = int.tryParse(intervalController.text) ?? 10;
+                    if (interval < 1) interval = 1;
+
+                    // Apply settings
+                    setState(() {
+                      _useAlternatePatterns = enableAlternating;
+                      _alternatePatternIndices = selectedPatterns;
+                      _alternatePatternInterval = interval;
+
+                      // If alternating is enabled, need to handle current pattern
+                      if (_useAlternatePatterns) {
+                        // Start with the first pattern in the list
+                        _patternIndex = _alternatePatternIndices[0];
+                        _currentAlternatingIndex = 0;
+
+                        // Reset animation state
+                        _isGridInitialized = false;
+
+                        // If already running, restart with new settings
+                        if (_isRunning) {
+                          _timer?.cancel();
+                          _patternSwitchTimer?.cancel();
+                          _startPixelFix();
+                          _startPatternAlternation();
+                        }
+                      } else {
+                        // If disabling alternating, cancel the switch timer
+                        _patternSwitchTimer?.cancel();
+                      }
+                    });
+
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar:
-          _isFullScreen ? null : AppBar(title: const Text('Pixel Fix Utility')),
+      // Removed the AppBar completely
       body: GestureDetector(
         onTap: () {
           if (_isFullScreen) {
@@ -544,6 +786,61 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
                 color: _currentColor,
                 width: double.infinity,
                 height: double.infinity,
+              ),
+
+            // Floating back button (only visible when not in fullscreen mode)
+            if (!_isFullScreen)
+              Positioned(
+                top: 16,
+                left: 16,
+                child: SafeArea(
+                  child: Material(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(24),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(24),
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        child: const Icon(
+                          Icons.arrow_back,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // Title label showing current pattern (only visible when not in fullscreen mode)
+            if (!_isFullScreen)
+              Positioned(
+                top: 16,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black45,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        'Pixel Fix: ${_patternNames[_patternIndex]}${_useAlternatePatterns ? ' (Alternating)' : ''}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
 
             // Controls - only visible when not in fullscreen mode
@@ -576,10 +873,25 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
                                 child: Text(_patternNames[index]),
                               );
                             }),
-                            onChanged: (value) {
-                              if (value != null) _changePattern(value);
-                            },
+                            onChanged:
+                                _useAlternatePatterns
+                                    ? null // Disable when using alternating patterns
+                                    : (value) {
+                                      if (value != null) _changePattern(value);
+                                    },
                           ),
+                          if (_useAlternatePatterns)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8.0),
+                              child: Text(
+                                '(Alternating)',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.amber,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
 
@@ -631,6 +943,17 @@ class _PixelFixScreenState extends State<PixelFixScreen> {
                               _isFullScreen ? 'Exit Fullscreen' : 'Fullscreen',
                             ),
                             onPressed: _toggleFullScreen,
+                          ),
+                          ElevatedButton.icon(
+                            icon: Icon(Icons.swap_horiz),
+                            label: Text('Alternate Patterns'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  _useAlternatePatterns ? Colors.amber : null,
+                            ),
+                            onPressed: () {
+                              _showAlternatingPatternsDialog();
+                            },
                           ),
                         ],
                       ),
@@ -784,6 +1107,8 @@ class _PixelGridScreenState extends State<PixelGridScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pixel Drawing Tool'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -1482,7 +1807,8 @@ class _StressTestScreenState extends State<StressTestScreen> {
               ? null
               : AppBar(
                 title: const Text('Display Stress Test'),
-                backgroundColor: Colors.deepOrange,
+                backgroundColor: Colors.transparent,
+                elevation: 0,
               ),
       body: Stack(
         children: [
